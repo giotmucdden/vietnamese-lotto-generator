@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Generate 40 Vietnamese lotto cards (20 sets)
-NEW RULES:
+Generate 40 Vietnamese Lotto Cards (20 sets)
 - 20 obviously different color schemes
-- No more than 2 consecutive empty cells in any row
+- All 90 numbers (1-90) per set
 - Exactly 5 numbers per row
-- All 90 numbers distributed across each set
+- Correct column ranges: 1-9, 10-19, 20-29, ..., 70-79, 80-90
 """
 
 from PIL import Image, ImageDraw, ImageFont
@@ -40,20 +39,8 @@ CARD_TOP = 710
 CARD_RIGHT = 2192
 CARD_BOTTOM = 3172
 
-def check_consecutive_empty(row):
-    """Check if there are more than 2 consecutive empty cells"""
-    consecutive = 0
-    max_consecutive = 0
-    for cell in row:
-        if cell is None:
-            consecutive += 1
-            max_consecutive = max(max_consecutive, consecutive)
-        else:
-            consecutive = 0
-    return max_consecutive
-
 def generate_set_numbers():
-    """Generate 2 cards with all 90 numbers, exactly 5 per row, max 2 consecutive empty"""
+    """Generate 2 cards with all 90 numbers, exactly 5 per row"""
     all_numbers = list(range(1, 91))
     random.shuffle(all_numbers)
     
@@ -63,7 +50,7 @@ def generate_set_numbers():
     def distribute_to_card(numbers):
         card = [[None] * 9 for _ in range(9)]
         
-        # Distribute numbers to columns
+        # Distribute numbers to columns by range
         by_column = [[] for _ in range(9)]
         for num in numbers:
             if num <= 9:
@@ -82,7 +69,7 @@ def generate_set_numbers():
                 by_column[6].append(num)
             elif num <= 79:
                 by_column[7].append(num)
-            else:
+            else:  # 80-90
                 by_column[8].append(num)
         
         # Place numbers randomly
@@ -90,102 +77,48 @@ def generate_set_numbers():
             nums = by_column[col]
             available_rows = list(range(9))
             random.shuffle(available_rows)
-            
             for i, num in enumerate(nums):
                 if i < len(available_rows):
-                    row = available_rows[i]
-                    card[row][col] = num
+                    card[available_rows[i]][col] = num
         
-        # Balance rows to have exactly 5 numbers
-        max_iterations = 100
-        for iteration in range(max_iterations):
+        # Balance rows to exactly 5 numbers
+        for iteration in range(100):
             all_correct = True
-            
             for row in range(9):
                 count = sum(1 for cell in card[row] if cell is not None)
-                
                 if count < 5:
-                    needed = 5 - count
                     all_correct = False
+                    needed = 5 - count
                     empty_cols = [c for c in range(9) if card[row][c] is None]
-                    
                     for col in empty_cols:
                         if needed == 0:
                             break
                         for other_row in range(9):
-                            if other_row == row:
-                                continue
-                            other_count = sum(1 for cell in card[other_row] if cell is not None)
-                            if other_count > 5 and card[other_row][col] is not None:
-                                card[row][col] = card[other_row][col]
-                                card[other_row][col] = None
-                                needed -= 1
-                                break
-                
+                            if other_row != row:
+                                other_count = sum(1 for cell in card[other_row] if cell is not None)
+                                if other_count > 5 and card[other_row][col] is not None:
+                                    card[row][col] = card[other_row][col]
+                                    card[other_row][col] = None
+                                    needed -= 1
+                                    break
                 elif count > 5:
-                    excess = count - 5
                     all_correct = False
+                    excess = count - 5
                     filled_cols = [c for c in range(9) if card[row][c] is not None]
                     random.shuffle(filled_cols)
-                    
                     for col in filled_cols:
                         if excess == 0:
                             break
                         num_to_move = card[row][col]
                         for other_row in range(9):
-                            if other_row == row:
-                                continue
-                            other_count = sum(1 for cell in card[other_row] if cell is not None)
-                            if other_count < 5 and card[other_row][col] is None:
-                                card[other_row][col] = num_to_move
-                                card[row][col] = None
-                                excess -= 1
-                                break
-            
-            if all_correct:
-                break
-        
-        # Fix consecutive empty cells (max 2)
-        max_fix_iterations = 200
-        for fix_iter in range(max_fix_iterations):
-            fixed_all = True
-            
-            for row_idx in range(9):
-                if check_consecutive_empty(card[row_idx]) > 2:
-                    fixed_all = False
-                    
-                    # Find filled columns in this row
-                    filled_cols = [c for c in range(9) if card[row_idx][c] is not None]
-                    if not filled_cols:
-                        continue
-                    
-                    # Try to swap with another row
-                    random.shuffle(filled_cols)
-                    for col in filled_cols:
-                        num_to_move = card[row_idx][col]
-                        
-                        # Find a row with empty cell in this column and won't violate the rule
-                        for other_row in range(9):
-                            if other_row == row_idx:
-                                continue
-                            if card[other_row][col] is None:
-                                # Temporarily swap
-                                card[row_idx][col] = None
-                                card[other_row][col] = num_to_move
-                                
-                                # Check if both rows are now valid
-                                if (check_consecutive_empty(card[row_idx]) <= 2 and 
-                                    check_consecutive_empty(card[other_row]) <= 2):
+                            if other_row != row:
+                                other_count = sum(1 for cell in card[other_row] if cell is not None)
+                                if other_count < 5 and card[other_row][col] is None:
+                                    card[other_row][col] = num_to_move
+                                    card[row][col] = None
+                                    excess -= 1
                                     break
-                                else:
-                                    # Revert
-                                    card[row_idx][col] = num_to_move
-                                    card[other_row][col] = None
-                        
-                        if check_consecutive_empty(card[row_idx]) <= 2:
-                            break
-            
-            if fixed_all:
+            if all_correct:
                 break
         
         return card
@@ -218,17 +151,14 @@ def create_lotto_card(grid, color_scheme, filename, frame_path):
     
     for row in range(9):
         row_y = row * cell_height + (0 if row < 3 else gap_height if row < 6 else 2 * gap_height)
-        
         for col in range(9):
             col_x = col * cell_width
-            
             if grid[row][col] is None:
                 draw.rectangle([col_x, row_y, col_x + cell_width, row_y + cell_height], 
                               fill=empty_color, outline=grid_color, width=3)
             else:
                 draw.rectangle([col_x, row_y, col_x + cell_width, row_y + cell_height], 
                               fill='#FFFFFF', outline=grid_color, width=3)
-                
                 num_text = str(grid[row][col])
                 bbox = draw.textbbox((0, 0), num_text, font=number_font)
                 draw.text((col_x + (cell_width - (bbox[2] - bbox[0])) // 2, 
@@ -256,11 +186,6 @@ def create_lotto_card(grid, color_scheme, filename, frame_path):
 
 print("🎨 Generating 40 Vietnamese Lotto Cards (20 sets)")
 print("=" * 60)
-print("NEW RULES:")
-print("  ✅ 20 obviously different colors")
-print("  ✅ Max 2 consecutive empty cells per row")
-print("  ✅ Exactly 5 numbers per row")
-print("=" * 60)
 
 frame_path = 'lion_frame_APPROVED_FINAL.png'
 card_num = 1
@@ -276,11 +201,6 @@ for set_num, color_scheme in enumerate(COLOR_SCHEMES, 1):
     
     status = "✅" if sorted(all_nums) == list(range(1, 91)) else "❌"
     
-    # Check consecutive empty rule
-    max_empty_c1 = max(check_consecutive_empty(c1[r]) for r in range(9))
-    max_empty_c2 = max(check_consecutive_empty(c2[r]) for r in range(9))
-    empty_status = "✅" if max_empty_c1 <= 2 and max_empty_c2 <= 2 else f"❌({max_empty_c1},{max_empty_c2})"
-    
     filename1 = f'lotto_card_{card_num:02d}.png'
     create_lotto_card(c1, color_scheme, filename1, frame_path)
     card_num += 1
@@ -288,7 +208,7 @@ for set_num, color_scheme in enumerate(COLOR_SCHEMES, 1):
     filename2 = f'lotto_card_{card_num:02d}.png'
     create_lotto_card(c2, color_scheme, filename2, frame_path)
     
-    print(f"Set {set_num:02d} ({color_scheme[2]:15s}): Cards {card_num-1:02d} & {card_num:02d} | All nums: {status} | Max empty: {empty_status}")
+    print(f"Set {set_num:02d} ({color_scheme[2]:15s}): Cards {card_num-1:02d} & {card_num:02d} | All 90 nums: {status}")
     card_num += 1
 
 print("=" * 60)
